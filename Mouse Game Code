@@ -1,0 +1,219 @@
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Mouse Maze Game</title>
+      <style>
+          body {
+              margin: 0;
+              padding: 20px;
+              background: #2c3e50;
+              font-family: Arial, sans-serif;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+          }
+          h1 {
+              color: white;
+              margin-bottom: 10px;
+          }
+          .controls {
+              color: white;
+              margin-bottom: 20px;
+              text-align: center;
+          }
+          #gameCanvas {
+              border: 3px solid #34495e;
+              background: #ecf0f1;
+          }
+          #gameOver, #victory {
+              color: white;
+              font-size: 24px;
+              margin-top: 20px;
+              display: none;
+          }
+          #victory {
+              color: #f39c12;
+          }
+      </style>
+  </head>
+  <body>
+      <h1>Mouse Maze Game</h1>
+      <div class="controls">
+          Use WASD or Arrow Keys to move the mouse to the cheese!
+      </div>
+      <canvas id="gameCanvas" width="600" height="400"></canvas>
+      <div id="gameOver">Game Over! Press R to restart</div>
+      <div id="victory">🧀 You found the cheese! Press R to play again</div>
+
+      <script>
+          const canvas = document.getElementById('gameCanvas');
+          const ctx = canvas.getContext('2d');
+
+          const CELL_SIZE = 20;
+          const COLS = canvas.width / CELL_SIZE;
+          const ROWS = canvas.height / CELL_SIZE;
+
+          // Maze layout (1 = wall, 0 = path)
+          const maze = [
+              [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+              [1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,1],
+              [1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,0,1],
+              [1,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+              [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,1],
+              [1,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,1],
+              [1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1],
+              [1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1],
+              [1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,0,1],
+              [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1],
+              [1,1,1,0,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,0,1,1,1,1],
+              [1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1],
+              [1,0,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,1,1,0,1,1,1,1,0,1],
+              [1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,1],
+              [1,1,1,1,1,0,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,1,1,1,0,1,0,1],
+              [1,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1],
+              [1,0,1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,0,1],
+              [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+              [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1],
+              [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+          ];
+
+          let mouse = { x: 1, y: 1 };
+          let cheese = { x: 28, y: 18 };
+          let gameState = 'playing'; // 'playing', 'won', 'lost'
+
+          function drawMaze() {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+              for (let row = 0; row < ROWS; row++) {
+                  for (let col = 0; col < COLS; col++) {
+                      if (maze[row][col] === 1) {
+                          ctx.fillStyle = '#2c3e50';
+                          ctx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                      }
+                  }
+              }
+          }
+
+          function drawMouse() {
+              const centerX = mouse.x * CELL_SIZE + CELL_SIZE / 2;
+              const centerY = mouse.y * CELL_SIZE + CELL_SIZE / 2;
+
+              // Mouse body
+              ctx.fillStyle = '#8e8e8e';
+              ctx.beginPath();
+              ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Mouse ears
+              ctx.fillStyle = '#696969';
+              ctx.beginPath();
+              ctx.arc(centerX - 4, centerY - 6, 3, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(centerX + 4, centerY - 6, 3, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Mouse tail
+              ctx.strokeStyle = '#696969';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(centerX + 8, centerY);
+              ctx.quadraticCurveTo(centerX + 15, centerY - 5, centerX + 12, centerY + 8);
+              ctx.stroke();
+          }
+
+          function drawCheese() {
+              const centerX = cheese.x * CELL_SIZE + CELL_SIZE / 2;
+              const centerY = cheese.y * CELL_SIZE + CELL_SIZE / 2;
+
+              // Cheese body
+              ctx.fillStyle = '#f1c40f';
+              ctx.beginPath();
+              ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+              ctx.fill();
+
+              // Cheese holes
+              ctx.fillStyle = '#f39c12';
+              ctx.beginPath();
+              ctx.arc(centerX - 3, centerY - 2, 2, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(centerX + 2, centerY + 1, 1.5, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(centerX + 1, centerY - 4, 1, 0, Math.PI * 2);
+              ctx.fill();
+          }
+
+          function canMoveTo(x, y) {
+              if (x < 0 || x >= COLS || y < 0 || y >= ROWS) {
+                  return false;
+              }
+              return maze[y][x] === 0;
+          }
+
+          function moveMouse(dx, dy) {
+              if (gameState !== 'playing') return;
+
+              const newX = mouse.x + dx;
+              const newY = mouse.y + dy;
+
+              if (canMoveTo(newX, newY)) {
+                  mouse.x = newX;
+                  mouse.y = newY;
+
+                  // Check if mouse reached cheese
+                  if (mouse.x === cheese.x && mouse.y === cheese.y) {
+                      gameState = 'won';
+                      document.getElementById('victory').style.display = 'block';
+                  }
+              }
+          }
+
+          function resetGame() {
+              mouse.x = 1;
+              mouse.y = 1;
+              gameState = 'playing';
+              document.getElementById('gameOver').style.display = 'none';
+              document.getElementById('victory').style.display = 'none';
+          }
+
+          function gameLoop() {
+              drawMaze();
+              drawMouse();
+              drawCheese();
+              requestAnimationFrame(gameLoop);
+          }
+
+          // Event listeners for keyboard input
+          document.addEventListener('keydown', (e) => {
+              switch(e.key.toLowerCase()) {
+                  case 'w':
+                  case 'arrowup':
+                      moveMouse(0, -1);
+                      break;
+                  case 's':
+                  case 'arrowdown':
+                      moveMouse(0, 1);
+                      break;
+                  case 'a':
+                  case 'arrowleft':
+                      moveMouse(-1, 0);
+                      break;
+                  case 'd':
+                  case 'arrowright':
+                      moveMouse(1, 0);
+                      break;
+                  case 'r':
+                      resetGame();
+                      break;
+              }
+          });
+
+          // Start the game
+          gameLoop();
+      </script>
+  </body>
+  </html>
