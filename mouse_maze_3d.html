@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Mouse Maze Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        h1 {
+            color: white;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            font-size: 36px;
+        }
+        .controls {
+            color: white;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 18px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        #gameCanvas {
+            border: 4px solid #1a1a2e;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            border-radius: 8px;
+            background: #2c2c2c;
+        }
+        #gameOver, #victory {
+            color: white;
+            font-size: 28px;
+            margin-top: 20px;
+            display: none;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            animation: pulse 1.5s infinite;
+        }
+        #victory {
+            color: #ffd700;
+        }
+        .stats {
+            color: white;
+            margin-top: 20px;
+            font-size: 18px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <h1>🧀 3D Mouse Maze Adventure 🐭</h1>
+    <div class="controls">
+        Use WASD or Arrow Keys for smooth pixel movement!<br>
+        Hold SHIFT to run faster!
+    </div>
+    <canvas id="gameCanvas" width="900" height="600"></canvas>
+    <div id="gameOver">😿 The cat caught you! Press R to restart</div>
+    <div id="victory">🎉 Victory! You found the cheese! Press R to play again</div>
+    <div class="stats">
+        <span id="timer">Time: 0s</span> | 
+        <span id="moves">Moves: 0</span>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game constants
+        const CELL_SIZE = 30;
+        const COLS = 30;
+        const ROWS = 20;
+        const WALL_HEIGHT = 12; // 3D wall height effect
+        const MOUSE_SPEED = 2; // pixels per frame
+        const MOUSE_RUN_SPEED = 4; // pixels per frame when running
+
+        // Maze layout (1 = wall, 0 = path, 2 = cheese)
+        const maze = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,1],
+            [1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,0,1],
+            [1,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+            [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,1],
+            [1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,0,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1],
+            [1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,0,1],
+            [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1],
+            [1,1,1,0,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,0,1,1,1,1],
+            [1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1],
+            [1,0,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,1,1,0,1,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,1],
+            [1,1,1,1,1,0,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,1,1,1,0,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1],
+            [1,0,1,1,1,1,1,1,1,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,1,0,1],
+            [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        // Set cheese position
+        maze[18][28] = 2;
+
+        // Game state
+        let mouse = { 
+            x: CELL_SIZE + CELL_SIZE/2, // Start in pixel coordinates
+            y: CELL_SIZE + CELL_SIZE/2,
+            vx: 0, // velocity x
+            vy: 0, // velocity y
+            direction: 'right', // facing direction
+            animFrame: 0, // animation frame
+            isMoving: false,
+            isRunning: false
+        };
+        
+        let cat = {
+            x: CELL_SIZE + CELL_SIZE/2, // Start in bottom left
+            y: (ROWS - 2) * CELL_SIZE + CELL_SIZE/2,
+            vx: 0,
+            vy: 0,
+            direction: 'right',
+            animFrame: 0,
+            isActive: false,
+            speed: 1.5 // Cat is slightly slower than mouse
+        };
+        
+        let cheese = { 
+            x: 28 * CELL_SIZE + CELL_SIZE/2, 
+            y: 18 * CELL_SIZE + CELL_SIZE/2,
+            collected: false
+        };
+        
+        let gameState = 'playing';
+        let moveCount = 0;
+        let startTime = Date.now();
+        let catReleaseTime = null;
+        let keys = {};
+
+        // Mouse sprite details for 90s style graphics
+        class MouseSprite {
+            constructor() {
+                this.bodyColors = {
+                    main: '#8B7355',
+                    light: '#A0826D',
+                    dark: '#6B5D4E',
+                    belly: '#D2B48C',
+                    pink: '#FFB6C1',
+                    eyes: '#000000',
+                    eyeWhite: '#FFFFFF'
+                };
+            }
+
+            draw(x, y, direction, animFrame, isMoving) {
+                ctx.save();
+                ctx.translate(x, y);
+                
+                // Flip sprite based on direction (reversed to face forward)
+                if (direction === 'right') {
+                    ctx.scale(-1, 1);
+                }
+
+                // Animation bounce
+                let bounceY = 0;
+                if (isMoving) {
+                    bounceY = Math.sin(animFrame * 0.3) * 2;
+                }
+
+                ctx.translate(0, bounceY);
+
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.ellipse(0, 12, 10, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Tail (animated)
+                ctx.strokeStyle = this.bodyColors.dark;
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                let tailWave = Math.sin(animFrame * 0.2) * 5;
+                ctx.moveTo(10, 2);
+                ctx.quadraticCurveTo(18 + tailWave, -2, 20, -8);
+                ctx.stroke();
+                
+                // Back leg
+                ctx.fillStyle = this.bodyColors.main;
+                ctx.beginPath();
+                ctx.ellipse(6, 8, 4, 6, -0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Body
+                ctx.fillStyle = this.bodyColors.main;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 12, 10, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Belly
+                ctx.fillStyle = this.bodyColors.belly;
+                ctx.beginPath();
+                ctx.ellipse(-2, 3, 8, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Front legs (animated walking)
+                let legOffset = isMoving ? Math.sin(animFrame * 0.4) * 2 : 0;
+                ctx.fillStyle = this.bodyColors.light;
+                ctx.beginPath();
+                ctx.ellipse(-7, 8 + legOffset, 3, 5, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Head
+                ctx.fillStyle = this.bodyColors.light;
+                ctx.beginPath();
+                ctx.ellipse(-8, -5, 8, 7, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Snout
+                ctx.fillStyle = this.bodyColors.belly;
+                ctx.beginPath();
+                ctx.ellipse(-14, -3, 5, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Ears
+                ctx.fillStyle = this.bodyColors.main;
+                ctx.beginPath();
+                ctx.arc(-5, -11, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(-1, -10, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Inner ears
+                ctx.fillStyle = this.bodyColors.pink;
+                ctx.beginPath();
+                ctx.arc(-5, -11, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(-1, -10, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eye
+                ctx.fillStyle = this.bodyColors.eyeWhite;
+                ctx.beginPath();
+                ctx.ellipse(-10, -6, 3, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Pupil
+                ctx.fillStyle = this.bodyColors.eyes;
+                ctx.beginPath();
+                ctx.arc(-11, -6, 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eye shine
+                ctx.fillStyle = this.bodyColors.eyeWhite;
+                ctx.beginPath();
+                ctx.arc(-11.5, -7, 1, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Nose
+                ctx.fillStyle = this.bodyColors.pink;
+                ctx.beginPath();
+                ctx.arc(-17, -3, 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Whiskers
+                ctx.strokeStyle = this.bodyColors.dark;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(-14, -1);
+                ctx.lineTo(-22, -2);
+                ctx.moveTo(-14, -3);
+                ctx.lineTo(-22, -4);
+                ctx.moveTo(-14, -5);
+                ctx.lineTo(-22, -6);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+        }
+
+        const mouseSprite = new MouseSprite();
+
+        // Cat sprite for chasing the mouse
+        class CatSprite {
+            constructor() {
+                this.colors = {
+                    main: '#4A4A4A',
+                    light: '#5A5A5A',
+                    dark: '#2A2A2A',
+                    belly: '#6B6B6B',
+                    pink: '#FFB6C1',
+                    eyes: '#00FF00', // Green cat eyes
+                    eyeDark: '#008800',
+                    white: '#FFFFFF',
+                    stripes: '#3A3A3A'
+                };
+            }
+
+            draw(x, y, direction, animFrame) {
+                ctx.save();
+                ctx.translate(x, y);
+                
+                // Flip based on direction
+                if (direction === 'right') {
+                    ctx.scale(-1, 1);
+                }
+
+                // Stalking animation
+                let stalkY = Math.sin(animFrame * 0.15) * 1.5;
+                ctx.translate(0, stalkY);
+
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.beginPath();
+                ctx.ellipse(0, 14, 12, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Tail (curved and animated)
+                ctx.strokeStyle = this.colors.main;
+                ctx.lineWidth = 5;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                let tailSwish = Math.sin(animFrame * 0.1) * 10;
+                ctx.moveTo(12, 0);
+                ctx.quadraticCurveTo(20, -5 + tailSwish/2, 25, -12 + tailSwish);
+                ctx.stroke();
+                
+                // Tail stripes
+                ctx.strokeStyle = this.colors.stripes;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([3, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Back legs
+                ctx.fillStyle = this.colors.main;
+                ctx.beginPath();
+                ctx.ellipse(8, 10, 5, 7, -0.3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(5, 10, 5, 7, 0.3, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Body (larger and more menacing)
+                ctx.fillStyle = this.colors.main;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 15, 12, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Body stripes
+                ctx.strokeStyle = this.colors.stripes;
+                ctx.lineWidth = 2;
+                for (let i = -8; i <= 8; i += 4) {
+                    ctx.beginPath();
+                    ctx.moveTo(i, -10);
+                    ctx.lineTo(i + 2, 10);
+                    ctx.stroke();
+                }
+
+                // Belly
+                ctx.fillStyle = this.colors.belly;
+                ctx.beginPath();
+                ctx.ellipse(-2, 4, 10, 7, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Front legs
+                ctx.fillStyle = this.colors.light;
+                let legMove = Math.sin(animFrame * 0.3) * 3;
+                ctx.beginPath();
+                ctx.ellipse(-8, 10 + legMove, 4, 6, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(-5, 10 - legMove, 4, 6, -0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Head (larger and more angular)
+                ctx.fillStyle = this.colors.light;
+                ctx.beginPath();
+                ctx.ellipse(-10, -6, 10, 9, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Ears (pointed and alert)
+                ctx.fillStyle = this.colors.main;
+                ctx.beginPath();
+                ctx.moveTo(-8, -14);
+                ctx.lineTo(-4, -18);
+                ctx.lineTo(-6, -12);
+                ctx.closePath();
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(-2, -13);
+                ctx.lineTo(2, -17);
+                ctx.lineTo(0, -11);
+                ctx.closePath();
+                ctx.fill();
+
+                // Inner ears
+                ctx.fillStyle = this.colors.pink;
+                ctx.beginPath();
+                ctx.moveTo(-6, -14);
+                ctx.lineTo(-5, -16);
+                ctx.lineTo(-6, -13);
+                ctx.closePath();
+                ctx.fill();
+
+                // Eyes (glowing green, menacing)
+                ctx.fillStyle = this.colors.eyes;
+                ctx.beginPath();
+                ctx.ellipse(-12, -7, 3, 4, -0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(-7, -7, 3, 4, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Pupils (vertical slits)
+                ctx.strokeStyle = this.colors.eyeDark;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-12, -9);
+                ctx.lineTo(-12, -5);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(-7, -9);
+                ctx.lineTo(-7, -5);
+                ctx.stroke();
+
+                // Eye glow
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+                ctx.beginPath();
+                ctx.ellipse(-12, -7, 4, 5, -0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(-7, -7, 4, 5, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Nose
+                ctx.fillStyle = this.colors.pink;
+                ctx.beginPath();
+                ctx.moveTo(-16, -5);
+                ctx.lineTo(-14, -3);
+                ctx.lineTo(-16, -3);
+                ctx.closePath();
+                ctx.fill();
+
+                // Mouth (showing teeth)
+                ctx.strokeStyle = this.colors.dark;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(-16, -3);
+                ctx.lineTo(-14, -2);
+                ctx.lineTo(-12, -2);
+                ctx.stroke();
+
+                // Fangs
+                ctx.fillStyle = this.colors.white;
+                ctx.beginPath();
+                ctx.moveTo(-14, -2);
+                ctx.lineTo(-13, 0);
+                ctx.lineTo(-14.5, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                // Whiskers
+                ctx.strokeStyle = this.colors.white;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(-14, -1);
+                ctx.lineTo(-20, -2);
+                ctx.moveTo(-14, -3);
+                ctx.lineTo(-20, -4);
+                ctx.moveTo(-14, -5);
+                ctx.lineTo(-20, -6);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+        }
+
+        const catSprite = new CatSprite();
+
+        // 3D Wall Renderer
+        function draw3DWall(x, y, width, height) {
+            const topOffset = WALL_HEIGHT;
+            
+            // Wall face gradient
+            const gradient = ctx.createLinearGradient(x, y, x, y + height);
+            gradient.addColorStop(0, '#4a4a4a');
+            gradient.addColorStop(0.5, '#3a3a3a');
+            gradient.addColorStop(1, '#2a2a2a');
+            
+            // Front face
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, y, width, height);
+            
+            // Top face (3D effect)
+            ctx.fillStyle = '#5a5a5a';
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + topOffset, y - topOffset);
+            ctx.lineTo(x + width + topOffset, y - topOffset);
+            ctx.lineTo(x + width, y);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Right face (3D effect)
+            ctx.fillStyle = '#3a3a3a';
+            ctx.beginPath();
+            ctx.moveTo(x + width, y);
+            ctx.lineTo(x + width + topOffset, y - topOffset);
+            ctx.lineTo(x + width + topOffset, y + height - topOffset);
+            ctx.lineTo(x + width, y + height);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Add subtle texture/brick pattern
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = 0.5;
+            
+            // Horizontal lines
+            for (let i = 0; i < height; i += 10) {
+                ctx.beginPath();
+                ctx.moveTo(x, y + i);
+                ctx.lineTo(x + width, y + i);
+                ctx.stroke();
+            }
+            
+            // Vertical lines (staggered brick pattern)
+            for (let j = 0; j < height; j += 20) {
+                for (let i = 0; i < width; i += 20) {
+                    let offset = (j / 20) % 2 === 0 ? 0 : 10;
+                    ctx.beginPath();
+                    ctx.moveTo(x + i + offset, y + j);
+                    ctx.lineTo(x + i + offset, y + j + 10);
+                    ctx.stroke();
+                }
+            }
+            
+            // Edge highlights
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + topOffset, y - topOffset);
+            ctx.lineTo(x + width + topOffset, y - topOffset);
+            ctx.stroke();
+        }
+
+        function drawMaze() {
+            // Clear canvas with gradient background
+            const bgGradient = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, canvas.width/2);
+            bgGradient.addColorStop(0, '#3a3a3a');
+            bgGradient.addColorStop(1, '#1a1a1a');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw floor for paths
+            ctx.fillStyle = '#8B7F77';
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (maze[row][col] === 0 || maze[row][col] === 2) {
+                        const x = col * CELL_SIZE;
+                        const y = row * CELL_SIZE;
+                        
+                        // Floor with subtle pattern
+                        ctx.fillStyle = (row + col) % 2 === 0 ? '#8B7F77' : '#7D716A';
+                        ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                        
+                        // Floor edges
+                        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                        ctx.lineWidth = 0.5;
+                        ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
+                    }
+                }
+            }
+
+            // Draw walls with 3D effect
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (maze[row][col] === 1) {
+                        draw3DWall(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    }
+                }
+            }
+        }
+
+        function drawCheese() {
+            if (cheese.collected) return;
+            
+            const x = cheese.x;
+            const y = cheese.y;
+            
+            // Cheese glow effect
+            const glowGradient = ctx.createRadialGradient(x, y, 0, x, y, 20);
+            glowGradient.addColorStop(0, 'rgba(255, 215, 0, 0.3)');
+            glowGradient.addColorStop(1, 'rgba(255, 215, 0, 0)');
+            ctx.fillStyle = glowGradient;
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Cheese shadow
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(x, y + 10, 12, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Main cheese body (wedge shape)
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.moveTo(x - 12, y + 5);
+            ctx.lineTo(x + 12, y + 5);
+            ctx.lineTo(x + 15, y - 8);
+            ctx.lineTo(x - 8, y - 8);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Cheese side
+            ctx.fillStyle = '#FFC125';
+            ctx.beginPath();
+            ctx.moveTo(x + 12, y + 5);
+            ctx.lineTo(x + 15, y - 8);
+            ctx.lineTo(x + 15, y - 2);
+            ctx.lineTo(x + 12, y + 8);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Cheese holes
+            ctx.fillStyle = '#FFB90F';
+            ctx.beginPath();
+            ctx.arc(x - 4, y - 2, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + 5, y + 1, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + 2, y - 5, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Highlight
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x - 8, y - 8);
+            ctx.lineTo(x + 15, y - 8);
+            ctx.stroke();
+        }
+
+        function checkWallCollision(x, y, radius = 10) {
+            // Check corners of the mouse hitbox
+            const points = [
+                { x: x - radius, y: y - radius },
+                { x: x + radius, y: y - radius },
+                { x: x - radius, y: y + radius },
+                { x: x + radius, y: y + radius }
+            ];
+            
+            for (let point of points) {
+                const gridX = Math.floor(point.x / CELL_SIZE);
+                const gridY = Math.floor(point.y / CELL_SIZE);
+                
+                if (gridX < 0 || gridX >= COLS || gridY < 0 || gridY >= ROWS) {
+                    return true;
+                }
+                
+                if (maze[gridY][gridX] === 1) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        function updateMouse() {
+            if (gameState !== 'playing') return;
+            
+            // Calculate speed based on running state
+            const speed = mouse.isRunning ? MOUSE_RUN_SPEED : MOUSE_SPEED;
+            
+            // Update velocity based on keys pressed
+            mouse.vx = 0;
+            mouse.vy = 0;
+            
+            if (keys['w'] || keys['arrowup']) mouse.vy = -speed;
+            if (keys['s'] || keys['arrowdown']) mouse.vy = speed;
+            if (keys['a'] || keys['arrowleft']) {
+                mouse.vx = -speed;
+                mouse.direction = 'left';
+            }
+            if (keys['d'] || keys['arrowright']) {
+                mouse.vx = speed;
+                mouse.direction = 'right';
+            }
+            
+            // Diagonal movement normalization
+            if (mouse.vx !== 0 && mouse.vy !== 0) {
+                mouse.vx *= 0.707; // 1/sqrt(2)
+                mouse.vy *= 0.707;
+            }
+            
+            // Check if moving
+            mouse.isMoving = mouse.vx !== 0 || mouse.vy !== 0;
+            
+            // Try to move horizontally
+            let newX = mouse.x + mouse.vx;
+            if (!checkWallCollision(newX, mouse.y)) {
+                mouse.x = newX;
+            }
+            
+            // Try to move vertically
+            let newY = mouse.y + mouse.vy;
+            if (!checkWallCollision(mouse.x, newY)) {
+                mouse.y = newY;
+            }
+            
+            // Update animation frame
+            if (mouse.isMoving) {
+                mouse.animFrame++;
+                moveCount++;
+            }
+            
+            // Check cheese collection
+            const distance = Math.sqrt(Math.pow(mouse.x - cheese.x, 2) + Math.pow(mouse.y - cheese.y, 2));
+            if (distance < 20 && !cheese.collected) {
+                cheese.collected = true;
+                gameState = 'won';
+                document.getElementById('victory').style.display = 'block';
+            }
+        }
+
+        function updateCat() {
+            if (gameState !== 'playing') return;
+            
+            // Activate cat after 10 seconds
+            if (!cat.isActive) {
+                if (!catReleaseTime) {
+                    catReleaseTime = Date.now();
+                }
+                if (Date.now() - catReleaseTime >= 10000) {
+                    cat.isActive = true;
+                }
+                return;
+            }
+            
+            // Simple pathfinding - move towards mouse
+            const dx = mouse.x - cat.x;
+            const dy = mouse.y - cat.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > 0) {
+                // Normalize direction and apply speed
+                cat.vx = (dx / distance) * cat.speed;
+                cat.vy = (dy / distance) * cat.speed;
+                
+                // Update direction
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    cat.direction = dx > 0 ? 'right' : 'left';
+                }
+                
+                // Try to move horizontally
+                let newX = cat.x + cat.vx;
+                if (!checkWallCollision(newX, cat.y, 12)) {
+                    cat.x = newX;
+                } else {
+                    // Try to move around obstacle
+                    if (cat.vy === 0) {
+                        cat.vy = cat.speed * (Math.random() > 0.5 ? 1 : -1);
+                    }
+                }
+                
+                // Try to move vertically
+                let newY = cat.y + cat.vy;
+                if (!checkWallCollision(cat.x, newY, 12)) {
+                    cat.y = newY;
+                } else {
+                    // Try to move around obstacle
+                    if (cat.vx === 0) {
+                        cat.vx = cat.speed * (Math.random() > 0.5 ? 1 : -1);
+                    }
+                }
+                
+                cat.animFrame++;
+            }
+            
+            // Check if cat caught mouse
+            if (distance < 20) {
+                gameState = 'lost';
+                document.getElementById('gameOver').style.display = 'block';
+            }
+        }
+
+        function updateStats() {
+            if (gameState === 'playing') {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                document.getElementById('timer').textContent = `Time: ${elapsed}s`;
+                document.getElementById('moves').textContent = `Moves: ${Math.floor(moveCount/10)}`;
+            }
+        }
+
+        function resetGame() {
+            mouse.x = CELL_SIZE + CELL_SIZE/2;
+            mouse.y = CELL_SIZE + CELL_SIZE/2;
+            mouse.vx = 0;
+            mouse.vy = 0;
+            mouse.direction = 'right';
+            mouse.animFrame = 0;
+            mouse.isMoving = false;
+            mouse.isRunning = false;
+            
+            cat.x = CELL_SIZE + CELL_SIZE/2;
+            cat.y = (ROWS - 2) * CELL_SIZE + CELL_SIZE/2;
+            cat.vx = 0;
+            cat.vy = 0;
+            cat.direction = 'right';
+            cat.animFrame = 0;
+            cat.isActive = false;
+            
+            cheese.collected = false;
+            gameState = 'playing';
+            moveCount = 0;
+            startTime = Date.now();
+            catReleaseTime = Date.now();
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('victory').style.display = 'none';
+        }
+
+        function gameLoop() {
+            updateMouse();
+            updateCat();
+            updateStats();
+            
+            // Draw everything
+            drawMaze();
+            drawCheese();
+            
+            // Draw mouse with sprite
+            mouseSprite.draw(mouse.x, mouse.y, mouse.direction, mouse.animFrame, mouse.isMoving);
+            
+            // Draw cat if active
+            if (cat.isActive) {
+                catSprite.draw(cat.x, cat.y, cat.direction, cat.animFrame);
+            }
+            
+            // Draw warning when cat is about to be released
+            if (!cat.isActive && catReleaseTime) {
+                const timeUntilCat = 10 - Math.floor((Date.now() - catReleaseTime) / 1000);
+                if (timeUntilCat > 0 && timeUntilCat <= 10) {
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+                    ctx.font = 'bold 24px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`Cat releases in: ${timeUntilCat}s`, canvas.width / 2, 30);
+                }
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            
+            // Check for running
+            if (e.key === 'Shift') {
+                mouse.isRunning = true;
+            }
+            
+            // Reset game
+            if (e.key.toLowerCase() === 'r') {
+                resetGame();
+            }
+            
+            e.preventDefault();
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+            
+            // Stop running
+            if (e.key === 'Shift') {
+                mouse.isRunning = false;
+            }
+        });
+
+        // Start the game
+        resetGame();
+        gameLoop();
+    </script>
+</body>
+</html>
